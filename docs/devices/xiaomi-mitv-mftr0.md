@@ -95,3 +95,28 @@
 - 「安装未知应用」是 Android TV 设置里的总列表（`com.android.tv.settings/.device.apps.specialaccess.ExternalSourcesActivity`），不会直接定位到 Aerial；`install.sh` 用 appops 预先放行。
 - 按「完成」后露出的是 PatchWall 的 `com.mitv.tvhome/.DetailsActivity`，不是 HOME Activity，所以加了「安装器关闭后拉回 Aerial」那条规则（见 ARCHITECTURE.md「升级」）。
 
+
+## Fork：唤醒时守护漏接原桌面（versionCode 53）
+
+待机后通知监听与同步框架多次恢复进程，守护晚于 SCREEN_ON 和
+PatchWall 窗口事件绑定；日志出现 `Aerial keeps being stopped and the front is unknown`，
+触发为乐视保留的频繁复活保护，从而停留在小米首页。
+
+守护现在在没有窗口记录时查询最近 60 秒的 UsageEvents，再决定是否接管。
+需要安装脚本已有的 GET_USAGE_STATS app-op；应在 APK 安装/覆盖升级完成后检查并授予。
+授权后执行 `adb shell appops write-settings`，确保立即写盘，再做 ADB 重启测试。
+本机连续两次即时重启曾丢失仅在内存里的 app-op 修改。
+已暂停的 Activity 不再作为前台依据；无授权、无记录或记录过期时仍保留频繁复活保护。
+不做持续轮询，不关闭原桌面，不影响其他无障碍服务。
+
+自动测试覆盖重复复活后补认原桌面、HDMI 在前台、桌面暂停、缺少授权、
+缺少记录和过期记录。真机验证记录保存在本机 local/wake-fix，不提交个人设备信息。
+
+真机已复现修复路径：主动停止进程后，小米桌面在守护重绑前出现；
+新版日志显示从用量记录补认 `com.mitv.tvhome.MainActivityUserMode`，
+随后自动打开 Aerial，无需主页键或外部启动命令。待机唤醒也已由用户确认
+自动进入 Aerial，但仍能短暂看到小米首页：固件的 HOME 仍由系统签名桌面持有，
+本修复不承诺启动过程中完全不显示系统桌面。
+
+授权写盘后已再次重启验证：GET_USAGE_STATS 保持 allow，前台自动为 Aerial。
+此前的两次即时重启均恢复到 default；安装脚本已补立即写盘（不支持的旧系统忽略）。
