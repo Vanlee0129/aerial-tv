@@ -1,3 +1,5 @@
+> **Fork 版本：** 此分支包含性能优化和高清电视图标。新版桌面的构建、迁移和真机验收见 [DAILY-FORK.md](docs/DAILY-FORK.md)。下方上游下载与安装链接仍指向原项目。
+
 <div align="center">
 
 <img src="docs/brand/icon.png" width="96" alt="Aerial 图标">

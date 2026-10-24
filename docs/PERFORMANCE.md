@@ -1,5 +1,8 @@
 # Performance validation and side-by-side preview
 
+Historical benchmark report for the isolated preview. The later user-authorized daily migration
+and HD icon release are documented in [DAILY-FORK.md](DAILY-FORK.md).
+
 The `preview` flavor is for comparing this fork on a TV that already has official Aerial installed.
 It has package `app.orchard.tv.preview`, label **Aerial Preview**, and phone configuration port 8791.
 It declares no HOME activity, boot receiver, accessibility guardian, notification revival listener,

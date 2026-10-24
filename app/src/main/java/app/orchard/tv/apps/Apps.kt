@@ -193,7 +193,7 @@ object AppCatalog {
             found.values.map { (info, leanback) ->
                 val home = info.packageName in stockHomes
                 async {
-                    runCatching { entry(pm, info, leanback, byCategory, home) }
+                    runCatching { entry(context, pm, info, leanback, byCategory, home) }
                         .onFailure { Log.w(TAG, "left ${info.packageName} out of Home", it) }
                         .getOrNull()?.let { if (home) it.copy(label = homeLabel) else it }
                 }
@@ -290,7 +290,7 @@ object AppCatalog {
         label to art
     }.getOrNull()
 
-    private fun entry(pm: PackageManager, info: ActivityInfo, leanback: Boolean, byCategory: Map<String, SystemTile>, stockHome: Boolean = false): AppEntry {
+    private fun entry(context: Context, pm: PackageManager, info: ActivityInfo, leanback: Boolean, byCategory: Map<String, SystemTile>, stockHome: Boolean = false): AppEntry {
         val pkg = info.packageName
         // A picture chosen on the phone page changes the tile as much as an update does.
         // Drawn as the stock launcher or not is part of it too: the same package can be either.
@@ -320,6 +320,7 @@ object AppCatalog {
             val own = if (stockHome) SystemTile.Home
                 else if (system) SYSTEM_TILES[pkg] ?: byCategory[pkg]?.takeIf { banner == null } else null
             val custom = CustomIcons.load(pkg)
+            val bundled = if (custom == null) BundledIcons.load(context, pkg) else null
             val recipe = TileRecipes.of(pkg)
             // A tile that cannot be drawn used to drop the app from Home altogether, without a word
             // in the log (com.fongmi.androidtv on TCL MT5879, issue #415). Its icon then, or
@@ -327,6 +328,7 @@ object AppCatalog {
             art = runCatching {
                 when {
                     custom != null -> TileArtFactory.fromBanner(android.graphics.drawable.BitmapDrawable(android.content.res.Resources.getSystem(), custom))
+                    bundled != null -> TileArtFactory.fromBanner(bundled)
                     own != null -> TileArtFactory.forSystem(own)
                     recipe?.glyph != null -> TileArtFactory.glyphTile(recipe.top ?: 0, recipe.bottom ?: 0, recipe.glyph)
                     banner != null && recipe?.useIcon != true -> TileArtFactory.fromBanner(banner)
@@ -338,7 +340,7 @@ object AppCatalog {
             }.recoverCatching {
                 Log.w(TAG, "could not draw the icon of $pkg either; using the default one", it)
                 TileArtFactory.fromIcon(pm.defaultActivityIcon, null)
-            }.getOrThrow()
+            }.also { bundled?.bitmap?.recycle() }.getOrThrow()
             synchronized(cache) { cache[pkg] = Cached(cacheKey, label, art) }
             runCatching { TileDiskCache.write(pkg, cacheKey, label, art) }
         }
