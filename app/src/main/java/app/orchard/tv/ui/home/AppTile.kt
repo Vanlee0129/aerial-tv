@@ -434,7 +434,11 @@ fun AppTile(
                     val pw = if (lifted) fw else w
                     val ph = if (lifted) fh else h
                     scale(size.width / pw, size.height / ph, pivot = Offset.Zero) {
-                        drawImage(if (lifted) ready!! else face(0, pw, ph))
+                        drawImage(
+                            if (lifted) ready!! else face(0, pw, ph),
+                            dstSize = IntSize(pw, ph),
+                            filterQuality = FilterQuality.Medium,
+                        )
                         art.fore?.let { fore ->
                             val at = art.foreAt
                             // Parallax: the logo travels further than the plate when the tile leans.
@@ -541,7 +545,15 @@ private fun GraphicsLayerScope.zoom(scale: Float) {
 }
 
 private fun tileFace(back: ImageBitmap, w: Int, h: Int, radius: Float, rimWidth: Float): ImageBitmap {
-    val src = back.asAndroidBitmap()
+    val original = back.asAndroidBitmap()
+    var src = original
+    // A bilinear shader alone skips pixels when shrinking by more than 2:1. Prefilter the
+    // cached face once, preserving the original artwork for the larger focused face.
+    while (src.width > w * 2 && src.height > h * 2) {
+        val next = android.graphics.Bitmap.createScaledBitmap(src, src.width / 2, src.height / 2, true)
+        if (src !== original) src.recycle()
+        src = next
+    }
     val bitmap = createBitmap(w, h)
     android.graphics.Canvas(bitmap).apply {
         val fill = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
@@ -551,6 +563,7 @@ private fun tileFace(back: ImageBitmap, w: Int, h: Int, radius: Float, rimWidth:
         drawPath(smoothRectPath(Rect(0f, 0f, w.toFloat(), h.toFloat()), radius).asAndroidPath(), fill)
         drawBitmap(tileRim(w, h, radius, rimWidth, RIM_AT_REST).asAndroidBitmap(), 0f, 0f, null)
     }
+    if (src !== original) src.recycle()
     return bitmap.frozen().asImageBitmap()
 }
 

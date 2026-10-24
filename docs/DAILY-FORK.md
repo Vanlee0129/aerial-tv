@@ -53,3 +53,23 @@ The firmware HOME resolver still reports Xiaomi's launcher, so takeover is throu
 Opening Weather from its new tile and pressing HOME returned to the fork. The original system
 screensaver component was unchanged. No Aerial crash appeared in the captured crash buffer.
 Raw records and the final tile sheet are saved locally under `local/migration/`.
+
+## Version 52: icon quality correction
+
+PNG decoder subsampling caused visible aliasing on fine curves. Bundled assets now use
+filtered progressive reduction and retain up to twice the focused tile resolution. Cached
+face creation prefilters large reductions; drawing uses explicit sampling. The export sheet
+also scales HD art correctly rather than cropping it. Fashion wallpaper has its own generated
+asset, the internal video service alias is removed, and Xiaomi settings has adjustment switches.
+
+Validation on MiTV-MFTR0: daily release installed in place and compiled with `speed`;
+versionCode 52 confirmed. Inspected screenshots of home, focused tiles, full grid and all
+19 exported app tiles. The curved HD logos look smoother and the two gallery apps are distinct.
+25 daily + 27 preview unit tests pass, including a native-graphics checkerboard reduction test.
+No new launcher crash in the crash buffer. HOME returned to the fork on final check and ADB
+remains enabled. Firmware HOME still resolves to PatchWall; accessibility guard is required.
+No firmware changes or new reboot test were made for this icon-only update.
+
+Navigation sampling is retained locally, but foreground/focus changes occurred during the
+session, so the two short runs are not a controlled performance comparison. No speedup claimed.
+See [clean-system feasibility](CLEAN-SYSTEM.md) for the separate OS replacement assessment.

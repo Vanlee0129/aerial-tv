@@ -107,7 +107,7 @@ object AppCatalog {
      */
     private val SYSTEM_TILES = mapOf(
         // Xiaomi MiTV-MFTR0
-        "com.xiaomi.mitv.settings" to SystemTile.Settings,
+        "com.xiaomi.mitv.settings" to SystemTile.TvSettings,
         "com.mitv.gallery" to SystemTile.Photos,
         "com.xiaomi.mitv.calendar" to SystemTile.Calendar,
         "com.xiaomi.tweather" to SystemTile.Weather,
