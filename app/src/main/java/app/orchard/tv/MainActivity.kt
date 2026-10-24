@@ -83,7 +83,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val volumeReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) = vm.refreshSystem()
+        override fun onReceive(context: Context, intent: Intent) = vm.refreshVolume()
     }
 
     /** Midnight, or the clock set at boot: a new daily photo, and the next of the rotating ones. */
@@ -587,8 +587,8 @@ class MainActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT >= 24) cm.registerDefaultNetworkCallback(networkCallback)
             else cm.registerNetworkCallback(NetworkRequest.Builder().build(), networkCallback)
         }
-        // Apps can change while Aerial is in the background without it hearing about it.
-        vm.reload()
+        // reloadIfPackagesChanged above already catches background package changes. An
+        // unconditional reload here cancelled the cold-start load and scanned every app twice.
         Wallpapers.refreshDailyIfStale()
         Wallpapers.rotateIfDue()
         Weather.refreshIfStale()

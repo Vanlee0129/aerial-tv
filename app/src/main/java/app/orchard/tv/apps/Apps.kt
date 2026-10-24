@@ -138,7 +138,7 @@ object AppCatalog {
         CATEGORY_APPSTORE_LAUNCHER to SystemTile.Store,
     )
 
-    private class Cached(val stamp: Long, val width: Int, val label: String, val art: TileArt)
+    private class Cached(val key: String, val label: String, val art: TileArt)
     private val cache = HashMap<String, Cached>()
 
     /** The apps of the last load, for the phone page. */
@@ -200,7 +200,10 @@ object AppCatalog {
             }.awaitAll().filterNotNull()
         }.plus(shortcuts(context, pm)).also {
             loaded = it
-            TileDiskCache.keepOnly(it.mapTo(HashSet()) { app -> app.packageName })
+            val installed = it.mapTo(HashSet()) { app -> app.packageName }
+            // Package removal should release the corresponding artwork, not just its disk file.
+            synchronized(cache) { cache.keys.retainAll(installed) }
+            TileDiskCache.keepOnly(installed)
         }
     }
 
@@ -293,9 +296,10 @@ object AppCatalog {
         // Drawn as the stock launcher or not is part of it too: the same package can be either.
         val stamp = runCatching { pm.getPackageInfo(pkg, 0).lastUpdateTime }.getOrDefault(0L) + CustomIcons.stamp(pkg) +
             if (stockHome) 1 else 0
-        val cached = synchronized(cache) { cache[pkg] }?.takeIf { it.stamp == stamp && it.width == TileArtFactory.W }
-            ?: runCatching { TileDiskCache.read(pkg, TileDiskCache.key(stamp)) }.getOrNull()?.let { (label, art) ->
-                Cached(stamp, TileArtFactory.W, label, art).also { synchronized(cache) { cache[pkg] = it } }
+        val cacheKey = TileDiskCache.key(stamp)
+        val cached = synchronized(cache) { cache[pkg] }?.takeIf { it.key == cacheKey }
+            ?: runCatching { TileDiskCache.read(pkg, cacheKey) }.getOrNull()?.let { (label, art) ->
+                Cached(cacheKey, label, art).also { synchronized(cache) { cache[pkg] = it } }
             }
         val system = (info.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
         val label: String
@@ -335,8 +339,8 @@ object AppCatalog {
                 Log.w(TAG, "could not draw the icon of $pkg either; using the default one", it)
                 TileArtFactory.fromIcon(pm.defaultActivityIcon, null)
             }.getOrThrow()
-            synchronized(cache) { cache[pkg] = Cached(stamp, TileArtFactory.W, label, art) }
-            runCatching { TileDiskCache.write(pkg, TileDiskCache.key(stamp), label, art) }
+            synchronized(cache) { cache[pkg] = Cached(cacheKey, label, art) }
+            runCatching { TileDiskCache.write(pkg, cacheKey, label, art) }
         }
         val removable = !system
         return AppEntry(pkg, label, ComponentName(pkg, info.name), leanback, removable, art)
