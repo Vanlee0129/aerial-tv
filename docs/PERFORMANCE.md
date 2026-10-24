@@ -71,3 +71,78 @@ References: [Apple tvOS design](https://developer.apple.com/design/human-interfa
 [Compose performance](https://developer.android.com/develop/ui/compose/performance/bestpractices).
 
 Frame flag reference: [Android 14 FrameInfo.h](https://github.com/aosp-mirror/platform_frameworks_base/blob/android14-release/libs/hwui/FrameInfo.h). Vendor bit 16 has no definition there.
+
+## Validation environment (2026-10-24)
+
+- Xiaomi MiTV-MFTR0, Android 14 / API 34, 1920×1080, Skia OpenGL; same 20 apps, wallpaper and preview data.
+- Instrumented baseline: `bdde185`; candidate: `aed7ab2` (app sources). Both optimized release, compiled with `speed`.
+- 24 Android unit tests passed, including preview isolation and locale cache invalidation; 4 Python parser tests passed.
+- Both preview and standard release APKs built. Standard APK was not installed because it cannot update the upstream-signed package.
+- Lint: candidate 10 errors / 93 warnings; compared every issue ID, severity and message to baseline. No new issue. Baseline has 11 errors, including the preview label fixed by localized resources. Remaining errors are upstream RestrictedApi and Media3 UnstableApi annotations. Full lint therefore does **not** pass.
+- Raw captures stay in ignored `local/bench/`; artifact in `local/artifacts/`. The preview uses this computer’s existing signing key fallback, which must be retained for future updates.
+- The 120-frame framestats ring truncates longer navigation sequences; keep raw percentiles separate from Android’s full-scenario counters. One baseline GPU histogram reports a 4950ms overflow bin, so do not use GPU histograms as precise GPU runtime.
+
+## Primary A/B results
+
+10 process-cold launches and 5 rounds per interaction scenario, in baseline → candidate order.
+These are one-device observations, not statistical confidence bounds.
+
+| Metric | Baseline | Candidate | Observation |
+|---|---:|---:|---|
+| Android TotalTime median | 607 ms | 598.5 ms | 1.4% lower |
+| Loaded-frame marker median, after content setup | 545.5 ms | 532.5 ms | 2.4% lower; 20% target unmet |
+| Navigation raw P50 / P95 / P99 | 15.30 / 35.10 / 64.29 ms | 15.51 / 33.98 / 36.06 ms | Typical frame unchanged; lower tail in this run |
+| Navigation Android deadline jank | 26/925 (2.81%) | 18/984 (1.83%) | Full-scenario counters |
+| Control Center raw P50 / P95 / P99 | 18.74 / 88.82 / 156.26 ms | 16.94 / 61.50 / 110.44 ms | Median −9.6%, P95 −30.8% |
+| Control Center Android deadline jank | 86/298 (28.86%) | 69/344 (20.06%) | Still above smoothness target |
+| PSS after panel scenario | 133386 KiB | 125657 KiB | Single snapshots, −5.8%; not a leak test |
+| Frames during 10 seconds idle | 0 | 2 | No continuous animation; occasional status redraw |
+
+The 60Hz P95 ≤16.7ms target remains unmet. Panel P95 is not end-to-end panel-opening latency,
+so the separate first-open latency target is not proven by this measurement. Navigation’s
+per-run P95 varies substantially; the lower P99 must not be advertised as a guaranteed reduction.
+No long-duration memory-leak soak has been performed.
+
+Full aggregate distributions and per-round platform counters: [baseline](benchmarks/2026-10-24-baseline.json),
+[candidate](benchmarks/2026-10-24-candidate.json). Raw screenshots, activity diagnostics and frame tables
+are retained locally, not published.
+
+### Reverse-order confirmation
+
+Reinstalled the baseline over the same preview data after the candidate, then ran 3 starts and
+3 rounds per scenario. [Confirmation data](benchmarks/2026-10-24-baseline-confirm.json):
+
+- Baseline launch median 596ms, so **no robust startup improvement** is established.
+- Baseline navigation P50/P95/P99: 17.03/33.82/38.09ms; candidate P95 is effectively the same.
+  The large initial navigation P99 improvement is not reproduced against the warmed baseline.
+- Baseline Control Center P50/P95/P99: 18.65/71.80/110.95ms. Candidate median is 9.2% lower,
+  P95 14.4% lower, P99 effectively unchanged. Android deadline jank: baseline 49/184 (26.63%),
+  candidate 69/344 (20.06%). The consistent gain is panel frame cost, not elimination of first-open stalls.
+- Retain navigation changes for fewer synchronous allocations, cache correctness and interruption
+  behavior; do not claim guaranteed navigation throughput gains. No change introduced a material
+  typical-frame regression in this comparison.
+
+This is A/B/A confirmation, not randomized benchmarking; system load and warm caches remain
+factors. The final installed preview was restored to the candidate APK afterward.
+
+## Functional acceptance
+
+Verified on the final candidate release, with screenshots and activity diagnostics retained locally:
+
+- D-pad navigation, high-contrast focus, boundary nudges, Control Center open/navigation/close.
+- Launched the TV weather app from its tile; Back returned to preview with the same weather tile focused.
+- Held OK opened the app menu without triggering its first action on key-up.
+- Created a temporary folder in preview, opened it, returned, and dissolved that same folder; original layout restored.
+- Started the photo screensaver through the existing preview action; OK dismissed it without opening the focused app.
+- Pressed HOME at the end: official `app.orchard.tv.MainActivity` is foreground again. The firmware HOME resolver
+  remains the Xiaomi launcher and the existing official HomeGuard handles redirection.
+- Accessibility-service list and system screensaver component matched their before captures exactly; ADB enabled remained `1`.
+- No Aerial crash found in the captured crash buffer and no ANR observed during these runs. This is not a long-duration soak.
+
+Not tested in this pass: reboot/standby, video screensaver/4K decoder transitions, reduced-motion system setting,
+other TV models, or migration of official data/default-home ownership to the fork. Preview intentionally
+does not take ownership of HOME or boot. Existing official boot behavior was not changed.
+
+APK SHA-256: `6b0db4819d871f8c1f1cd27e0625e4680b7ad57a943fc40316e427ec5c6ac2c5`.
+To try it, open **Aerial 预览版** from the installed-app list. HOME returns to official Aerial.
+To remove the preview later, uninstall only `app.orchard.tv.preview`; original Aerial is independent.
