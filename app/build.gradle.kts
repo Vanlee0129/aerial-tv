@@ -18,6 +18,7 @@ android {
         targetSdk = 34
         versionCode = 49
         versionName = "1.46"
+        buildConfigField("boolean", "PREVIEW", "false")
         // `./gradlew -Pdiag ...`: a build for one reporter's TV whose logcat shows no app lines;
         // see system/DiagLog.kt.
         val diag = project.hasProperty("diag")
@@ -31,6 +32,12 @@ android {
     flavorDimensions += "home"
     productFlavors {
         create("standard") { dimension = "home" }
+        create("preview") {
+            dimension = "home"
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+            buildConfigField("boolean", "PREVIEW", "true")
+        }
         create("guard") {
             dimension = "home"
             versionNameSuffix = "-guard"
