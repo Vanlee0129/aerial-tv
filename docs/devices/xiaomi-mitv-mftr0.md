@@ -118,3 +118,21 @@ MiTV-MFTR0（Android 14）待机时会停止 Aerial，通知监听和同步框�
 原生小米首页仍会短暂显示，然后进入 Aerial，尚未消除这一闪现。
 未停用原桌面，未修改固件。新增回归测试覆盖重复复活、HDMI 前台、Activity
 暂停、授权缺失、记录缺失及过期记录。
+
+## 本机另行验证的广告设置（不自动应用）
+
+在 MiTV-MFTR0 / OS3.0.106.0.UFTMATV 的已安装 PatchWall 中核对：
+`BootUpADManager.canPlayBootAd()` 在 Global `mitv.settings.advertise.state` 为 1
+时返回 false；否则读取 System `boot_ad_switch`，为 0 时也不播放开机广告。
+`boot_ad` 是播放状态，不应当当作永久开关修改。
+
+本机在使用者要求下将上述两个开关分别设为 1、0，并对用户 0 禁用
+`com.xiaomi.mitv.hyper.screensaver`，保留其数据。重启和唤醒后设置仍保留，
+原生屏保组件不能再启动。完整开机广告画面没有获得使用者确认，不能仅凭
+设置值宣称所有固件和所有开机阶段的广告均已消除。
+
+这属于单台设备的可逆配置，不加入通用安装脚本：禁用原生屏保也会关闭它的
+壁纸/时钟界面，Aerial 自己的屏保不受影响。应用前保存两项原始设置和组件
+启用状态；恢复时写回原值（原值不存在时删除该 key），并恢复原包启用状态。
+本机两项原值均不存在，屏保原状态为 default，因此回退是删除这两个 key
+并对该屏保包执行 `pm default-state --user 0`。不要停用 `com.mitv.tvhome`。
