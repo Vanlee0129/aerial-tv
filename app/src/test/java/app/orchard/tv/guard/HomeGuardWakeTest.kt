@@ -76,7 +76,7 @@ class HomeGuardWakeTest {
     }
 
     @Test fun staleHistoryCannotPullViewerOutOfAnUnknownApp() {
-        event(stock, UsageEvents.Event.MOVE_TO_FOREGROUND, 61_000)
+        event(stock, UsageEvents.Event.MOVE_TO_FOREGROUND, 6 * 60 * 60 * 1000L + 1000)
         takeover()
         assertNull(shadowOf(service).nextStartedActivity)
     }

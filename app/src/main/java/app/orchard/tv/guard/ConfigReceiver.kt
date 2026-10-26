@@ -7,6 +7,7 @@ import app.orchard.tv.apps.TileSheet
 import app.orchard.tv.settings.AerialSettings
 import app.orchard.tv.system.DiagLog
 import app.orchard.tv.update.Updates
+import app.orchard.tv.ui.components.UhdCanvas
 import app.orchard.tv.wallpaper.ScreensaverMode
 import app.orchard.tv.wallpaper.Wallpapers
 import kotlinx.coroutines.launch
@@ -62,6 +63,11 @@ class ConfigReceiver : BroadcastReceiver() {
         for (key in listOf("mode_switch", "soft_layer")) {
             if (intent.hasExtra(key)) DiagLog.setOption(context, key, intent.getBooleanExtra(key, false))
         }
+        // ... --ez uhd_canvas true|false / --es uhd_canvas auto   (Home at the panel's resolution,
+        //                                 see UhdCanvas; applies the next time Home starts)
+        if (intent.hasExtra("uhd_canvas")) {
+            UhdCanvas.choose(context, intent.extras?.get("uhd_canvas") as? Boolean)
+        }
         if (intent.hasExtra("update_test")) {
             Updates.testApk = if (intent.getBooleanExtra("update_test", false)) {
                 java.io.File(context.getExternalFilesDir(null) ?: context.filesDir, "update-test.apk")
@@ -72,6 +78,9 @@ class ConfigReceiver : BroadcastReceiver() {
             Updates.checkIfStale(force = true)
         }
         if (intent.hasExtra("keep_adb")) GuardSetup.setKeepAdb(context, intent.getBooleanExtra("keep_adb", false))
+        // ... --ei adb_probe_port <port>   (verify the keep_adb toggle without closing a working
+        //                                 link, until Aerial restarts; issue #454)
+        if (intent.hasExtra("adb_probe_port")) GuardSetup.adbProbePort = intent.getIntExtra("adb_probe_port", 5555)
         if (intent.hasExtra("guard_off_in_standby")) GuardSetup.setOffInStandby(context, intent.getBooleanExtra("guard_off_in_standby", false))
         if (intent.hasExtra("own_screensaver")) GuardSetup.setOwnScreensaver(context, intent.getBooleanExtra("own_screensaver", false))
         // aerial, photos, clock, videos or system.

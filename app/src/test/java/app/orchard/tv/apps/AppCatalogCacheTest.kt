@@ -19,6 +19,43 @@ import java.util.Locale
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class AppCatalogCacheTest {
+    @Test fun offlineLibraryChoiceInvalidatesCachedArtwork() = runBlocking {
+        val context: Context = RuntimeEnvironment.getApplication()
+        IconLibrary.init(context)
+        val pm = shadowOf(context.packageManager)
+        val app = ApplicationInfo().apply {
+            packageName = "com.ktcp.video"
+            icon = android.R.drawable.sym_def_app_icon
+        }
+        val activity = ActivityInfo().apply {
+            packageName = app.packageName
+            name = "${app.packageName}.MainActivity"
+            applicationInfo = app
+            exported = true
+            enabled = true
+        }
+        pm.installPackage(PackageInfo().apply {
+            packageName = app.packageName
+            applicationInfo = app
+            activities = arrayOf(activity)
+        })
+        pm.addResolveInfoForIntent(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
+            ResolveInfo().apply { activityInfo = activity },
+        )
+        try {
+            IconLibrary.choose(app.packageName, IconLibrary.Pick.Library)
+            val bundled = AppCatalog.load(context).single { it.packageName == app.packageName }.art
+            org.junit.Assert.assertSame(bundled, AppCatalog.load(context).single { it.packageName == app.packageName }.art)
+            IconLibrary.choose(app.packageName, IconLibrary.Pick.Own)
+            val own = AppCatalog.load(context).single { it.packageName == app.packageName }.art
+            org.junit.Assert.assertNotSame(bundled, own)
+            org.junit.Assert.assertSame(own, AppCatalog.load(context).single { it.packageName == app.packageName }.art)
+        } finally {
+            IconLibrary.choose(app.packageName, null)
+        }
+    }
+
     @Test fun localeChangeInvalidatesInMemoryLabelsWithoutPackageUpdate() = runBlocking {
         val context: Context = RuntimeEnvironment.getApplication()
         val pm = shadowOf(context.packageManager)
