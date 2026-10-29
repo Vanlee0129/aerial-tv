@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -58,6 +59,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -71,6 +74,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.orchard.tv.CcPage
 import app.orchard.tv.BuildConfig
 import app.orchard.tv.HomeViewModel
@@ -89,6 +93,7 @@ import app.orchard.tv.ui.components.consumeTaps
 import app.orchard.tv.ui.components.dismissOnTap
 import app.orchard.tv.ui.components.liquidGlass
 import app.orchard.tv.ui.home.MenuRow
+import app.orchard.tv.ui.home.VpnBadge
 import app.orchard.tv.ui.home.dateText
 import app.orchard.tv.ui.home.timeText
 import app.orchard.tv.ui.theme.Glyph
@@ -194,6 +199,12 @@ fun ControlCenter(
 private fun MainPage(vm: HomeViewModel, now: LocalDateTime, takeFocus: Boolean, onOpen: (android.content.Intent) -> Unit) {
     val context = LocalContext.current
     val first = remember { FocusRequester() }
+    val networkFocus = remember { FocusRequester() }
+    val settingsFocus = remember { FocusRequester() }
+    // The buttons share one row above a panel-wide slider, so focus searching up from it has three
+    // equally near choices and takes the middle one, Network, whichever button Down came from
+    // (75A7D). Remember that button and send Up back to it.
+    var cameFrom by remember { mutableStateOf(first) }
     // Firmwares that list their inputs late (see HomeViewModel.refreshSources): look again while
     // the page is open and still empty. One provider or TvInputManager query every 3 s.
     LaunchedEffect(Unit) {
@@ -229,12 +240,17 @@ private fun MainPage(vm: HomeViewModel, now: LocalDateTime, takeFocus: Boolean, 
                     style = Type.Caption, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.widthIn(max = 110.dp),
                 )
+                if (net.vpn) VpnBadge(Palette.SecondaryLabel, fontSize = 9.sp)
             }
         }
 
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            RoundButton(Glyph.Input, stringResource(R.string.cc_inputs), focusRequester = first) {
+            RoundButton(
+                Glyph.Input, stringResource(R.string.cc_inputs),
+                focusRequester = first,
+                modifier = Modifier.onFocusChanged { if (it.isFocused) cameFrom = first },
+            ) {
                 // TCL lists no inputs to Android; its own input panel is the next best thing.
                 vm.overlay = if (vm.sources.isEmpty() && SystemProbe.openInputPicker(context)) Overlay.None
                 else Overlay.ControlCenter(CcPage.Inputs)
@@ -242,6 +258,8 @@ private fun MainPage(vm: HomeViewModel, now: LocalDateTime, takeFocus: Boolean, 
             RoundButton(
                 when (vm.network.kind) { NetKind.Ethernet -> Glyph.Ethernet; NetKind.Offline -> Glyph.Offline; else -> Glyph.Wifi },
                 stringResource(R.string.cc_network),
+                focusRequester = networkFocus,
+                modifier = Modifier.onFocusChanged { if (it.isFocused) cameFrom = networkFocus },
             ) {
                 vm.whenUnlocked {
                     val pages = SystemProbe.networkSettingsIntents(context, ethernet = vm.network.kind == NetKind.Ethernet)
@@ -249,11 +267,15 @@ private fun MainPage(vm: HomeViewModel, now: LocalDateTime, takeFocus: Boolean, 
                     onOpen(pages.first())
                 }
             }
-            RoundButton(Glyph.Gear, stringResource(R.string.cc_settings)) { vm.whenUnlocked { onOpen(SystemProbe.settingsIntent(context)) } }
+            RoundButton(
+                Glyph.Gear, stringResource(R.string.cc_settings),
+                focusRequester = settingsFocus,
+                modifier = Modifier.onFocusChanged { if (it.isFocused) cameFrom = settingsFocus },
+            ) { vm.whenUnlocked { onOpen(SystemProbe.settingsIntent(context)) } }
         }
 
         Spacer(Modifier.height(12.dp))
-        VolumeRow(vm)
+        VolumeRow(vm, cameFrom)
         Spacer(Modifier.height(6.dp))
         BrightnessRow(vm)
 
@@ -348,6 +370,7 @@ private fun UpdatePage(vm: HomeViewModel, takeFocus: Boolean) {
             val status = when (val state = Updates.install) {
                 Updates.Install.Opened -> stringResource(R.string.cc_update_opened)
                 Updates.Install.NeedsPermission -> stringResource(R.string.cc_update_permission)
+                Updates.Install.NeedsStoragePermission -> stringResource(R.string.cc_update_storage_permission)
                 is Updates.Install.Failed -> stringResource(
                     when (state.reason) {
                         Updates.Failure.Download -> R.string.cc_update_failed_download
@@ -421,8 +444,14 @@ private fun SetupPage(vm: HomeViewModel, takeFocus: Boolean, onOpen: (android.co
 
 /** A round Control Center button: frosted at rest, white when focused. */
 @Composable
-private fun RoundButton(glyph: Glyph, label: String, focusRequester: FocusRequester? = null, onClick: () -> Unit) {
-    Pressable(onClick = onClick, focusRequester = focusRequester, focusedScale = 1.1f) { state ->
+private fun RoundButton(
+    glyph: Glyph,
+    label: String,
+    focusRequester: FocusRequester? = null,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Pressable(onClick = onClick, modifier = modifier, focusRequester = focusRequester, focusedScale = 1.1f) { state ->
         val bg by animateColorAsState(if (state.focused) Palette.Focus else Palette.Fill, tween(140, easing = Motion.EaseOut), label = "round-bg")
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(64.dp)) {
             Box(Modifier.size(48.dp).clip(CircleShape).background(bg), contentAlignment = Alignment.Center) {
@@ -449,6 +478,7 @@ private fun SliderRow(
     value: String,
     steps: Int,
     onStep: (Int) -> Unit,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     // Each step ticks, as focus does; a step past either end bumps instead. Read through state:
@@ -463,7 +493,7 @@ private fun SliderRow(
     Pressable(
         onClick = onClick,
         focusedScale = 1.03f,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         onKey = { e ->
             val code = e.nativeKeyEvent.keyCode
             if (code != NativeKeyEvent.KEYCODE_DPAD_LEFT && code != NativeKeyEvent.KEYCODE_DPAD_RIGHT) return@Pressable false
@@ -509,7 +539,7 @@ private fun SliderRow(
 }
 
 @Composable
-private fun VolumeRow(vm: HomeViewModel) {
+private fun VolumeRow(vm: HomeViewModel, returnTo: FocusRequester) {
     val volume = vm.volume
     SliderRow(
         glyph = if (volume.muted) Glyph.SpeakerMuted else Glyph.Speaker,
@@ -517,6 +547,7 @@ private fun VolumeRow(vm: HomeViewModel) {
         value = if (volume.muted) stringResource(R.string.cc_muted) else volume.level.toString(),
         steps = volume.max,
         onStep = vm::adjustVolume,
+        modifier = Modifier.focusProperties { up = returnTo },
         onClick = vm::toggleMute,
     )
 }
@@ -528,6 +559,21 @@ private fun VolumeRow(vm: HomeViewModel) {
 @Composable
 private fun BrightnessRow(vm: HomeViewModel) {
     val context = LocalContext.current
+    // XGIMI (GMUI): the real brightness is the DLP light-engine level. It reads through the HAL
+    // class (SystemProbe.xgimiBrightnessLevel) and, on this firmware, writes through it too, so the
+    // row is a slider of the light engine's own levels (1..10) rather than a percentage of the
+    // system setting that moves nothing. Poll the HAL while the row is on screen: the level can be
+    // changed from the TV's own overlay, which does not pause Aerial, so no onResume or
+    // screen_brightness observer ever fires for it.
+    val xgimi = remember { SystemProbe.xgimiBrightnessLevel() != null }
+    LaunchedEffect(xgimi) {
+        if (!xgimi) return@LaunchedEffect
+        vm.refreshBrightness()
+        while (isActive) {
+            delay(700)
+            vm.refreshBrightness()
+        }
+    }
     val level = vm.brightness
     if (level == null) {
         MenuRow(Glyph.Sun, stringResource(R.string.cc_brightness), onClick = {
@@ -539,8 +585,8 @@ private fun BrightnessRow(vm: HomeViewModel) {
             glyph = Glyph.Sun,
             level = level,
             value = Math.round(level * 100).toString(),
-            // Brightness.adjust moves 5% a step, and stops at 1%.
-            steps = 20,
+            // Brightness.adjust moves 5% a step, and stops at 1%; XGIMI steps its own levels.
+            steps = if (xgimi) SystemProbe.xgimiBrightnessMax else 20,
             onStep = vm::adjustBrightness,
             onClick = {},
         )

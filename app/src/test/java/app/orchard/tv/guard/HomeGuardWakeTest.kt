@@ -43,8 +43,8 @@ class HomeGuardWakeTest {
     }
 
     private fun takeover() {
-        HomeGuardService::class.java.getDeclaredMethod("takeOverIfStockHomeInFront", String::class.java, Boolean::class.javaPrimitiveType)
-            .apply { isAccessible = true }.invoke(service, "wake regression", true)
+        HomeGuardService::class.java.getDeclaredMethod("takeOverIfStockHomeInFront", String::class.java, Boolean::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
+            .apply { isAccessible = true }.invoke(service, "wake regression", true, false)
     }
 
     @Test fun repeatedRevivalsStillRecoverKnownStockHomeWithoutWindowEvent() {
